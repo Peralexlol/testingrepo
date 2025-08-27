@@ -1,0 +1,311 @@
+local Gui = mUI:NewModule("mUI.Config.Gui")
+
+function Gui:OnInitialize()
+    -- Initialize Database
+    Gui.db = mUI.db.profile.gui
+
+    -- Libraries
+    local AceGUI = LibStub("AceGUI-3.0")
+    local ACD = LibStub("AceConfigDialog-3.0")
+    local LSM = LibStub("LibSharedMedia-3.0")
+    local font = LSM:Fetch('font', mUI.db.profile.general.font)
+
+    -- Create Options Frame
+    local gui = CreateFrame("Frame", "mUIOptions", UIParent, "PortraitFrameTemplate")
+
+    -- Set FrameStrata, Size and Default Position
+    gui:SetFrameStrata("DIALOG")
+    gui:SetSize(900, 500)
+    gui:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    gui:SetScale(Gui.db.scale)
+
+    -- Set Background, Title and Portrait
+    gui.TitleContainer.TitleText:SetText("|cff009cffmuleyo|rUI (" .. C_AddOns.GetAddOnMetadata("mUI", "version") .. ")")
+    gui.TitleContainer.TitleText:SetFont(font, 12, "OUTLINE")
+    gui.PortraitContainer.portrait:SetTexture([[Interface\AddOns\mUI\Media\Logo.png]])
+    gui.Bg:SetColorTexture(-0.05, -0.05, -0.05, 0.8)
+
+    -- Make frame draggable
+    gui:SetMovable(true)
+    gui:SetUserPlaced(true)
+    gui:SetClampedToScreen(true)
+    gui:SetClampRectInsets(800, -800, 0, 400)
+    gui:RegisterForDrag("LeftButton")
+    gui.TitleContainer:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            gui:StartMoving()
+        end
+    end)
+    gui.TitleContainer:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then
+            gui:StopMovingOrSizing()
+        end
+    end)
+
+    -- Create Slider Value Text
+    gui.scaleText = gui.TitleContainer:CreateFontString(nil, "OVERLAY")
+    gui.scaleText:SetPoint("RIGHT", gui.TitleContainer, "RIGHT", -80, -1)
+    gui.scaleText:SetFont(font, 12, "OUTLINE")
+    gui.scaleText:SetText(math.floor(Gui.db.scale * 100) .. "%")
+    gui.scaleText:SetTextColor(1, 0.81960791349411, 0, 1)
+
+    -- Create Scale Slider
+    gui.scaleSlider = CreateFrame("Slider", nil, gui.TitleContainer, "MinimalSliderTemplate")
+    gui.scaleSlider:SetPoint("RIGHT", gui.TitleContainer, "RIGHT", -3, -1)
+    gui.scaleSlider:SetFrameLevel(gui.TitleContainer:GetFrameLevel() + 1)
+    gui.scaleSlider:SetSize(80, 10)
+    gui.scaleSlider:SetMinMaxValues(0.8, 1.5)
+    gui.scaleSlider:SetValue(Gui.db.scale)
+    gui.scaleSlider:SetValueStep(0.01)
+    gui.scaleSlider:SetObeyStepOnDrag(true)
+    gui.scaleSlider:HookScript("OnValueChanged", function(_, value)
+        Gui.db.scale = value
+        gui.scaleText:SetText(math.floor(value * 100) .. "%")
+    end)
+    gui.scaleSlider:HookScript("OnMouseUp", function()
+        gui:SetScale(Gui.db.scale)
+    end)
+
+    -- Create Options Container
+    gui.container = AceGUI:Create("ScrollFrame")
+    gui.container:SetLayout("Fill")
+    gui.container.frame:SetParent(gui)
+    gui.container.frame:SetPoint("TOPLEFT", gui, "TOPLEFT", 25, -55)
+    gui.container.frame:SetPoint("BOTTOMRIGHT", gui, "BOTTOMRIGHT", -25, 25)
+    gui.container.content:SetPoint("TOPLEFT", gui, "TOPLEFT", 25, -55)
+    gui.container.content:SetPoint("BOTTOMRIGHT", gui, "BOTTOMRIGHT", -25, 25)
+    gui.container.frame:SetClipsChildren(true)
+    gui.container.frame:Show()
+
+    -- Create Tabs (Classic-compatible implementation)
+    local createTabs
+    if mUI:IsClassic() then
+        createTabs = function(frame, ...)
+            local tab_system = CreateFrame("Frame", "mUIOptionsTabs", frame)
+            local tabs = {}
+            local tab_buttons = {}
+
+            tab_system:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 15, 2)
+            tab_system:SetSize(1, 32)
+            tab_system:SetFrameStrata("DIALOG")
+
+            -- Custom tab selection callback
+            local tab_selected_callback = function() end
+            tab_system.SetTabSelectedCallback = function(self, callback)
+                tab_selected_callback = callback or function() end
+            end
+
+            -- SetTab function
+            tab_system.SetTab = function(self, index)
+                for i, tab_button in pairs(tab_buttons) do
+                    if i == index then
+                        -- Selected tab state
+                        tab_button:Disable()
+                        tab_button:SetHeight(36) -- Make selected tab taller
+                        -- Set active tab textures
+                        PanelTemplates_SelectTab(tab_button)
+                        tab_button:SetPoint("LEFT", (i == 1) and tab_system or tab_buttons[i - 1],
+                            (i == 1) and "LEFT" or "RIGHT", (i == 1) and 0 or -15, -2) -- Move up slightly
+                    else
+                        -- Unselected tab state
+                        tab_button:Enable()
+                        tab_button:SetHeight(32) -- Normal height for unselected tabs
+                        -- Set inactive tab textures
+                        PanelTemplates_DeselectTab(tab_button)
+                        tab_button:SetPoint("LEFT", (i == 1) and tab_system or tab_buttons[i - 1],
+                            (i == 1) and "LEFT" or "RIGHT", (i == 1) and 0 or -15, 0)
+                    end
+                end
+            end
+
+            -- AddTab function for compatibility
+            tab_system.AddTab = function(self, text)
+                local k = #tab_buttons + 1 -- Get next tab index
+                local tab = CreateFrame("Button", "mUIOptionsTab" .. k, tab_system, "CharacterFrameTabButtonTemplate")
+                tab:SetPoint("LEFT", (k == 1) and tab_system or tab_buttons[k - 1], (k == 1) and "LEFT" or "RIGHT",
+                    (k == 1) and 0 or -15, 0)
+                tab:SetID(k)
+                tab:SetText(text)
+
+                -- Size the tab appropriately
+                local text_width = tab:GetFontString():GetStringWidth() + 20
+                local min_width = 60
+                tab:SetWidth(math.max(min_width, text_width))
+
+                -- Tab click handler
+                tab:SetScript("OnClick", function(self)
+                    tab_system:SetTab(k)
+                    tab_selected_callback()
+                end)
+
+                -- Add to arrays
+                tab_buttons[k] = tab
+                tabs[text] = tab
+
+                -- If this is the first tab, select it
+                if k == 1 then
+                    tab_system:SetTab(1)
+                end
+
+                return tab
+            end
+
+            -- Create tab buttons using AddTab function
+            local tab_names = { ... }
+            for k, v in pairs(tab_names) do
+                tab_system:AddTab(v)
+            end
+
+            -- GetTabButton function for compatibility
+            tab_system.GetTabButton = function(self, index)
+                return tab_buttons[index]
+            end
+
+            tab_system:SetTab(1)
+            return tab_system, tabs
+        end
+    else
+        createTabs = function(frame, ...)
+            local tab_system = CreateFrame("Frame", mUIOptionsTabs, frame, "TabSystemTemplate")
+            local tabs = {}
+            tab_system:SetTabSelectedCallback(function() end)
+            tab_system:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 15, 2)
+            for k, v in pairs({ ... }) do
+                tab_system:AddTab(v)
+                local tab = tab_system:GetTabButton(k)
+                local min_width = tab.Left:GetWidth() + tab.Middle:GetWidth() + tab.Right:GetWidth()
+                local text_width = tab.Text:GetWidth() + 20
+                tab:SetWidth(math.max(min_width, text_width))
+                tabs[v] = tab
+            end
+            tab_system:SetTab(1)
+            tab_system:SetFrameStrata("DIALOG")
+            return tab_system, tabs
+        end
+    end
+
+    gui.tab_system, gui.tabs = createTabs(
+        gui,
+        "General",
+        "Actionbars",
+        "Unitframes",
+        "Castbars",
+        "Nameplates",
+        "Tooltips",
+        "Map & Minimap",
+        "Chat",
+        "Misc",
+        "Profiles",
+        "About"
+    )
+
+    -- General Tab
+    gui.tabs["General"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_General_Tab", gui.container)
+    end)
+
+    -- Actionbars Tab
+    gui.tabs["Actionbars"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Actionbars_Tab", gui.container)
+    end)
+
+    -- Unitframes Tab
+    gui.tabs["Unitframes"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Unitframes_Tab", gui.container)
+    end)
+
+    -- Castbars Tab
+    gui.tabs["Castbars"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Castbars_Tab", gui.container)
+    end)
+
+    -- Nameplates Tab
+    gui.tabs["Nameplates"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Nameplates_Tab", gui.container)
+    end)
+
+    -- Tooltips Tab
+    gui.tabs["Tooltips"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Tooltips_Tab", gui.container)
+    end)
+
+    -- Map & Minimap Tab
+    gui.tabs["Map & Minimap"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_MapMinimap_Tab", gui.container)
+    end)
+
+    -- Chat Tab
+    gui.tabs["Chat"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Chat_Tab", gui.container)
+    end)
+
+    -- Misc Tab
+    gui.tabs["Misc"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Misc_Tab", gui.container)
+    end)
+
+    -- Profile Tab
+    gui.tabs["Profiles"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_Profiles_Tab", gui.container)
+    end)
+
+    -- About Tab
+    gui.tabs["About"]:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        ACD:Open("mUIOptions_About_Tab", gui.container)
+    end)
+
+    -- Smooth fade-out on close/esc
+    gui.CloseButton:HookScript("OnClick", function()
+        gui.container:ReleaseChildren()
+        local fadeInfo = {}
+        fadeInfo.mode = "OUT"
+        fadeInfo.timeToFade = 0.2
+        fadeInfo.finishedFunc = function()
+            gui:Hide()
+        end
+        UIFrameFade(gui, fadeInfo)
+    end)
+
+    gui:HookScript("OnShow", function()
+        gui.tab_system:SetTab(1)
+        ACD:Open("mUIOptions_General_Tab", gui.container)
+    end)
+
+    gui:HookScript("OnHide", function()
+        gui.container:ReleaseChildren()
+    end)
+
+    -- Theme gui Frame
+    C_Timer.After(0.1, function()
+        if mUI:IsClassic() then
+            mUI:Skin(gui, false, true)
+        else
+            mUI:Skin(gui.NineSlice, false, true)
+        end
+        mUI:Skin(gui.tabs["General"], false, true)
+        mUI:Skin(gui.tabs["Actionbars"], false, true)
+        mUI:Skin(gui.tabs["Unitframes"], false, true)
+        mUI:Skin(gui.tabs["Castbars"], false, true)
+        mUI:Skin(gui.tabs["Nameplates"], false, true)
+        mUI:Skin(gui.tabs["Tooltips"], false, true)
+        mUI:Skin(gui.tabs["Map & Minimap"], false, true)
+        mUI:Skin(gui.tabs["Chat"], false, true)
+        mUI:Skin(gui.tabs["Misc"], false, true)
+        mUI:Skin(gui.tabs["Profiles"], false, true)
+        mUI:Skin(gui.tabs["About"], false, true)
+    end)
+
+    -- Hide the frame by default
+    gui:Hide()
+end
